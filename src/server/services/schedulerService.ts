@@ -1,4 +1,4 @@
-import { LegacyAvailability, TimeSlot, ScheduleRequest, ScheduleResponse, User } from '../../shared/types';
+import { Availability, TimeSlot, ScheduleRequest, ScheduleResponse, User } from '../../shared/types';
 import { format, parseISO, addMinutes, isAfter, isBefore, isSameDay, differenceInMinutes } from 'date-fns';
 import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 
@@ -60,8 +60,7 @@ export class SchedulerService {
       if (individualInterviews.length === 0) {
         return {
           success: false,
-          message: 'No overlapping time slots found between candidate and any interviewer.',
-          suggested_times: this.generateAlternativeSuggestions(request, opts)
+          message: 'No overlapping time slots found between candidate and any interviewer.'
         };
       }
 
@@ -116,15 +115,15 @@ export class SchedulerService {
    * Find individual interviews between candidate and each interviewer
    */
   private   findIndividualInterviews(
-    candidateAvailability: LegacyAvailability[],
-    interviewerAvailability: LegacyAvailability[],
+    candidateAvailability: Availability[],
+    interviewerAvailability: Availability[],
     options: SchedulingOptions,
     users?: User[]
   ): TimeSlotMatch[] {
     const allInterviews: TimeSlotMatch[] = [];
 
     // Group interviewer availability by user_id
-    const interviewerMap = new Map<string, LegacyAvailability[]>();
+    const interviewerMap = new Map<string, Availability[]>();
     interviewerAvailability.forEach(avail => {
       if (!interviewerMap.has(avail.user_id)) {
         interviewerMap.set(avail.user_id, []);
@@ -163,8 +162,8 @@ export class SchedulerService {
    * Find all overlapping time slots between candidate and interviewer availability
    */
   private findOverlappingSlots(
-    candidateAvailability: LegacyAvailability[],
-    interviewerAvailability: LegacyAvailability[],
+    candidateAvailability: Availability[],
+    interviewerAvailability: Availability[],
     options: SchedulingOptions
   ): TimeSlotMatch[] {
     const overlappingSlots: TimeSlotMatch[] = [];
@@ -322,48 +321,6 @@ export class SchedulerService {
     return scoredSlots[0].slot;
   }
 
-  // Removed rankTimeSlots method - using brute force approach instead
-
-  /**
-   * Generate alternative suggestions when no exact match is found
-   */
-  private generateAlternativeSuggestions(
-    request: ScheduleRequest,
-    options: SchedulingOptions
-  ): string[] {
-    const suggestions: string[] = [];
-    
-    // Get all available dates from both parties
-    const allDates = new Set<string>();
-    request.candidate_availability.forEach(avail => allDates.add(avail.date));
-    request.interviewer_availability.forEach(avail => allDates.add(avail.date));
-
-    // Find the next few business days
-    const sortedDates = Array.from(allDates).sort();
-    const today = new Date();
-    
-    for (const date of sortedDates) {
-      if (suggestions.length >= options.maxSuggestions) break;
-      
-      const dateObj = parseISO(date);
-      if (isAfter(dateObj, today) || isSameDay(dateObj, today)) {
-        // Suggest a business hours slot for this date
-        const suggestedTime = this.createScheduledTime({
-          date,
-          startTime: options.businessHours.start,
-          endTime: this.addMinutesToTime(options.businessHours.start, options.duration),
-          duration: options.duration,
-          score: 0,
-          reasons: []
-        }, request.timezone);
-        
-        suggestions.push(suggestedTime);
-      }
-    }
-
-    return suggestions;
-  }
-
   /**
    * Create a scheduled time in ISO format
    */
@@ -473,12 +430,10 @@ export class SchedulerService {
     return this.formatTime(newTime);
   }
 
-  // Removed scoring utility methods - using brute force approach instead
-
   /**
    * Validate availability data
    */
-  validateAvailability(availability: LegacyAvailability[]): { valid: boolean; errors: string[] } {
+  validateAvailability(availability: Availability[]): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     if (!availability || availability.length === 0) {
@@ -487,24 +442,24 @@ export class SchedulerService {
     }
 
     availability.forEach((avail, index) => {
-      // Validate date format
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(avail.date)) {
-        errors.push(`Invalid date format at index ${index}: ${avail.date}`);
-      }
-
       // Validate time slots
       if (!avail.time_slots || avail.time_slots.length === 0) {
-        errors.push(`No time slots provided for date ${avail.date}`);
+        errors.push(`No time slots provided for availability at index ${index}`);
         return;
       }
 
       avail.time_slots.forEach((slot, slotIndex) => {
+        // Validate date format in each time slot
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(slot.date)) {
+          errors.push(`Invalid date format for availability ${index} slot ${slotIndex}: ${slot.date}`);
+        }
+
         if (!this.isValidTimeFormat(slot.start) || !this.isValidTimeFormat(slot.end)) {
-          errors.push(`Invalid time format for ${avail.date} slot ${slotIndex}: ${slot.start}-${slot.end}`);
+          errors.push(`Invalid time format for availability ${index} slot ${slotIndex}: ${slot.start}-${slot.end}`);
         }
 
         if (this.parseTime(slot.start).hours >= this.parseTime(slot.end).hours) {
-          errors.push(`Invalid time range for ${avail.date} slot ${slotIndex}: start time must be before end time`);
+          errors.push(`Invalid time range for availability ${index} slot ${slotIndex}: start time must be before end time`);
         }
       });
     });
@@ -520,30 +475,52 @@ export class SchedulerService {
    * Generate detailed availability summary
    */
   private generateAvailabilitySummary(request: ScheduleRequest): any {
+    // Group candidate availability by date
+    const candidateDateMap = new Map<string, any[]>();
+    request.candidate_availability.forEach(avail => {
+      avail.time_slots.forEach(slot => {
+        if (!candidateDateMap.has(slot.date)) {
+          candidateDateMap.set(slot.date, []);
+        }
+        candidateDateMap.get(slot.date)!.push({
+          start: slot.start,
+          end: slot.end,
+          duration_minutes: this.timeDifference(this.parseTime(slot.start), this.parseTime(slot.end))
+        });
+      });
+    });
+
+    // Group interviewer availability by date
+    const interviewerDateMap = new Map<string, any[]>();
+    request.interviewer_availability.forEach(avail => {
+      avail.time_slots.forEach(slot => {
+        if (!interviewerDateMap.has(slot.date)) {
+          interviewerDateMap.set(slot.date, []);
+        }
+        interviewerDateMap.get(slot.date)!.push({
+          start: slot.start,
+          end: slot.end,
+          duration_minutes: this.timeDifference(this.parseTime(slot.start), this.parseTime(slot.end))
+        });
+      });
+    });
+
     const summary = {
       candidate: {
-        total_days: request.candidate_availability.length,
+        total_days: candidateDateMap.size,
         total_slots: request.candidate_availability.reduce((sum, avail) => sum + avail.time_slots.length, 0),
-        availability_by_date: request.candidate_availability.map(avail => ({
-          date: avail.date,
-          slots: avail.time_slots.map(slot => ({
-            start: slot.start,
-            end: slot.end,
-            duration_minutes: this.timeDifference(this.parseTime(slot.start), this.parseTime(slot.end))
-          }))
+        availability_by_date: Array.from(candidateDateMap.entries()).map(([date, slots]) => ({
+          date,
+          slots
         }))
       },
       interviewers: {
         total_interviewers: request.interviewer_availability.length,
-        total_days: request.interviewer_availability.length,
+        total_days: interviewerDateMap.size,
         total_slots: request.interviewer_availability.reduce((sum, avail) => sum + avail.time_slots.length, 0),
-        availability_by_date: request.interviewer_availability.map(avail => ({
-          date: avail.date,
-          slots: avail.time_slots.map(slot => ({
-            start: slot.start,
-            end: slot.end,
-            duration_minutes: this.timeDifference(this.parseTime(slot.start), this.parseTime(slot.end))
-          }))
+        availability_by_date: Array.from(interviewerDateMap.entries()).map(([date, slots]) => ({
+          date,
+          slots
         }))
       },
       overlapping_days: this.findOverlappingDays(request.candidate_availability, request.interviewer_availability)
@@ -555,9 +532,23 @@ export class SchedulerService {
   /**
    * Find overlapping days between candidate and interviewer availability
    */
-  private findOverlappingDays(candidateAvailability: LegacyAvailability[], interviewerAvailability: LegacyAvailability[]): string[] {
-    const candidateDates = new Set(candidateAvailability.map(avail => avail.date));
-    const interviewerDates = new Set(interviewerAvailability.map(avail => avail.date));
+  private findOverlappingDays(candidateAvailability: Availability[], interviewerAvailability: Availability[]): string[] {
+    // Extract all dates from time slots in candidate availability
+    const candidateDates = new Set<string>();
+    candidateAvailability.forEach(avail => {
+      avail.time_slots.forEach(slot => {
+        candidateDates.add(slot.date);
+      });
+    });
+
+    // Extract all dates from time slots in interviewer availability
+    const interviewerDates = new Set<string>();
+    interviewerAvailability.forEach(avail => {
+      avail.time_slots.forEach(slot => {
+        interviewerDates.add(slot.date);
+      });
+    });
+
     return Array.from(candidateDates).filter(date => interviewerDates.has(date));
   }
 
@@ -565,8 +556,8 @@ export class SchedulerService {
    * Get scheduling statistics
    */
   getSchedulingStats(
-    candidateAvailability: LegacyAvailability[],
-    interviewerAvailability: LegacyAvailability[]
+    candidateAvailability: Availability[],
+    interviewerAvailability: Availability[]
   ): {
     totalCandidateSlots: number;
     totalInterviewerSlots: number;
@@ -576,8 +567,21 @@ export class SchedulerService {
     const candidateSlots = candidateAvailability.reduce((sum, avail) => sum + avail.time_slots.length, 0);
     const interviewerSlots = interviewerAvailability.reduce((sum, avail) => sum + avail.time_slots.length, 0);
     
-    const candidateDates = new Set(candidateAvailability.map(avail => avail.date));
-    const interviewerDates = new Set(interviewerAvailability.map(avail => avail.date));
+    // Extract dates from time slots
+    const candidateDates = new Set<string>();
+    candidateAvailability.forEach(avail => {
+      avail.time_slots.forEach(slot => {
+        candidateDates.add(slot.date);
+      });
+    });
+    
+    const interviewerDates = new Set<string>();
+    interviewerAvailability.forEach(avail => {
+      avail.time_slots.forEach(slot => {
+        interviewerDates.add(slot.date);
+      });
+    });
+    
     const overlappingDays = new Set([...candidateDates].filter(date => interviewerDates.has(date))).size;
     
     const overlappingSlots = this.findOverlappingSlots(candidateAvailability, interviewerAvailability, this.defaultOptions);
