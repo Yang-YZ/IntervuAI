@@ -32,17 +32,6 @@ export interface Availability {
   updated_at: string;
 }
 
-// Legacy interface for compatibility with scheduler service
-export interface LegacyAvailability {
-  id: string;
-  user_id: string;
-  scheduler_id: string;
-  date: string; // YYYY-MM-DD format
-  time_slots: TimeSlot[];
-  timezone?: string;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface TimeSlot {
   date: string;  // YYYY-MM-DD format
@@ -54,8 +43,8 @@ export interface ScheduleRequest {
   scheduler_id: string;
   timezone: string;
   interview_duration: number; // Duration in minutes
-  candidate_availability: LegacyAvailability[];
-  interviewer_availability: LegacyAvailability[]; // Can contain multiple interviewers
+  candidate_availability: Availability[];
+  interviewer_availability: Availability[]; // Can contain multiple interviewers
   users?: User[]; // User information for mapping IDs to names
 }
 

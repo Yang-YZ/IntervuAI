@@ -6,148 +6,29 @@ import { SchedulerService } from '../services/schedulerService';
 
 const router = express.Router();
 
-// Helper function to get latest availability record per user
+
 function getLatestAvailabilityPerUser(availabilityRecords: any[]): any[] {
+  console.log(`[getLatestAvailabilityPerUser] Input records:`, availabilityRecords.length);
   if (!availabilityRecords || availabilityRecords.length === 0) {
     return [];
   }
-  
-  // Group by user_id and date, get the latest record for each user-date combination
-  const userDateMap = new Map<string, any>();
+
+  // Get the most recent record per user
+  const userLatestMap = new Map<string, any>();
   
   availabilityRecords.forEach(record => {
-    const key = `${record.user_id}-${record.date}`;
-    const existingRecord = userDateMap.get(key);
-    if (!existingRecord || new Date(record.updated_at) > new Date(existingRecord.updated_at)) {
-      userDateMap.set(key, record);
+    const existing = userLatestMap.get(record.user_id);
+    if (!existing || new Date(record.updated_at) > new Date(existing.updated_at)) {
+      userLatestMap.set(record.user_id, record);
     }
   });
   
-  return Array.from(userDateMap.values());
-}
-
-function getMostRecentAvailabilitySubmission(availabilityRecords: any[]): any[] {
-  console.log(`[getMostRecentAvailabilitySubmission] Input records:`, availabilityRecords.length);
-  if (!availabilityRecords || availabilityRecords.length === 0) {
-    return [];
-  }
+  console.log(`[getLatestAvailabilityPerUser] Latest records per user:`, userLatestMap.size);
   
-  // Check if we have new schema (time_slots with date) or old schema (date/time_slots)
-  const firstRecord = availabilityRecords[0];
-  const hasNewSchema = firstRecord.time_slots && Array.isArray(firstRecord.time_slots) && 
-                      firstRecord.time_slots.length > 0 && firstRecord.time_slots[0].date;
-  const hasOldSchema = firstRecord.date && firstRecord.time_slots;
-  
-  console.log(`[getMostRecentAvailabilitySubmission] Schema detection - New: ${hasNewSchema}, Old: ${hasOldSchema}`);
-  
-  if (hasNewSchema) {
-    // With new schema, each record is already one complete submission per user
-    // Just get the most recent record for each user
-    const userLatestMap = new Map<string, any>();
-    
-    availabilityRecords.forEach(record => {
-      const userId = record.user_id;
-      const existingRecord = userLatestMap.get(userId);
-      if (!existingRecord || new Date(record.updated_at) > new Date(existingRecord.updated_at)) {
-        userLatestMap.set(userId, record);
-      }
-    });
-    
-    console.log(`[getMostRecentAvailabilitySubmission] Latest records per user:`, userLatestMap.size);
-    
-    // Convert the time_slots back to the old format for compatibility
-    const result: any[] = [];
-    userLatestMap.forEach((record) => {
-      // Group time slots by date
-      const dateMap = new Map<string, any[]>();
-      if (record.time_slots) {
-        console.log('[getMostRecentAvailabilitySubmission] record.time_slots:', record.time_slots);
-        
-        // Handle both array and single object formats
-        const timeSlotsArray = Array.isArray(record.time_slots) ? record.time_slots : [record.time_slots];
-        
-        timeSlotsArray.forEach((slot: any) => {
-          console.log('[getMostRecentAvailabilitySubmission] slot:', slot);
-          
-          // Use the date from the slot if available, otherwise use the record's date
-          const slotDate = slot.date || record.date;
-          if (!slotDate) {
-            console.log('[getMostRecentAvailabilitySubmission] No date found for slot:', slot);
-            return;
-          }
-          
-          if (!dateMap.has(slotDate)) {
-            dateMap.set(slotDate, []);
-          }
-          
-          // Use the stored local times directly (no conversion needed)
-          let startTime = slot.start;
-          let endTime = slot.end;
-          
-          // If start/end are ISO datetime strings (legacy data), extract just the time part
-          if (typeof slot.start === 'string' && slot.start.includes('T')) {
-            const startDate = new Date(slot.start);
-            startTime = startDate.toISOString().substring(11, 16); // Extract HH:MM
-          }
-          if (typeof slot.end === 'string' && slot.end.includes('T')) {
-            const endDate = new Date(slot.end);
-            endTime = endDate.toISOString().substring(11, 16); // Extract HH:MM
-          }
-          
-          dateMap.get(slotDate)!.push({
-            start: startTime,
-            end: endTime
-          });
-        });
-        
-        // Create individual date records
-        dateMap.forEach((timeSlots, date) => {
-          result.push({
-            id: record.id,
-            user_id: record.user_id,
-            scheduler_id: record.scheduler_id,
-            date: date,
-            time_slots: timeSlots,
-            timezone: record.timezone,
-            created_at: record.created_at,
-            updated_at: record.updated_at
-          });
-        });
-      }
-    });
-    
-    console.log(`[getMostRecentAvailabilitySubmission] Expanded result:`, result.length);
-    return result;
-  } else if (hasOldSchema) {
-    // Old schema - group by user_id and get most recent submission
-    console.log(`[getMostRecentAvailabilitySubmission] Using old schema logic`);
-    const userLatestMap = new Map<string, any>();
-    
-    availabilityRecords.forEach(record => {
-      const userId = record.user_id;
-      const existingRecord = userLatestMap.get(userId);
-      if (!existingRecord || new Date(record.updated_at) > new Date(existingRecord.updated_at)) {
-        userLatestMap.set(userId, record);
-      }
-    });
-    
-    // Get all records from the most recent submission for each user
-    const result: any[] = [];
-    userLatestMap.forEach((latestRecord) => {
-      const userLatestSubmissionTime = latestRecord.updated_at;
-      const userLatestSubmission = availabilityRecords.filter(record => 
-        record.user_id === latestRecord.user_id && 
-        record.updated_at === userLatestSubmissionTime
-      );
-      result.push(...userLatestSubmission);
-    });
-    
-    console.log(`[getMostRecentAvailabilitySubmission] Old schema result:`, result.length);
-    return result;
-  } else {
-    console.log(`[getMostRecentAvailabilitySubmission] Unknown schema format`);
-    return availabilityRecords;
-  }
+  // Return the latest records directly (new Availability format)
+  const result = Array.from(userLatestMap.values());
+  console.log(`[getLatestAvailabilityPerUser] Result:`, result.length);
+  return result;
 }
 
 // Create a new scheduler
@@ -242,7 +123,7 @@ router.get('/:id', [
     
     // Get availability for this scheduler - use most recent submission overall
     let allAvailability = req.database.getAvailabilityBySchedulerId(scheduler.id);
-    let availability = getMostRecentAvailabilitySubmission(allAvailability);
+    let availability = getLatestAvailabilityPerUser(allAvailability);
     
     // Time slots are already stored as local times, no conversion needed
     // if (tz) {
@@ -388,22 +269,13 @@ router.post('/:id/generate-schedule', [
       return;
     }
 
-    // Time slots are already stored as local times in HH:mm format, no conversion needed
-    const convertSlots = (arr: any[]) => arr.map(a => ({
-      ...a,
-      time_slots: (Array.isArray(a.time_slots) ? a.time_slots : []).map((s: any) => ({
-        date: s.date, // Preserve the date field
-        start: s.start, // Already in HH:mm format
-        end: s.end // Already in HH:mm format
-      }))
-    }));
-
+    // Use the new Availability format directly - no conversion needed
     const scheduleRequest = {
       scheduler_id: scheduler.id,
       timezone: scheduler.timezone,
       interview_duration: scheduler.interview_duration || 60,
-      candidate_availability: convertSlots(candidateAvailability),
-      interviewer_availability: convertSlots(interviewerAvailability),
+      candidate_availability: candidateAvailability,
+      interviewer_availability: interviewerAvailability,
       users: users // Pass user information for name mapping
     };
 
@@ -673,8 +545,8 @@ router.get('/:id/status', [
     console.log(`[status] Raw availability records:`, availability.length);
     console.log(`[status] Raw availability for candidate ${candidate?.id}:`, availability.filter((a: any) => a.user_id === candidate?.id));
     
-    const candidateAvailability = candidate ? getMostRecentAvailabilitySubmission(availability.filter((a: any) => a.user_id === candidate.id)) : [];
-    const interviewerAvailability = getMostRecentAvailabilitySubmission(availability.filter((a: any) => 
+    const candidateAvailability = candidate ? getLatestAvailabilityPerUser(availability.filter((a: any) => a.user_id === candidate.id)) : [];
+    const interviewerAvailability = getLatestAvailabilityPerUser(availability.filter((a: any) => 
       interviewers.some((interviewer: any) => interviewer.id === a.user_id)
     ));
     
@@ -745,7 +617,7 @@ router.get('/:id/status', [
           count: interviewers.length,
           expected: scheduler.interviewer_count || 1,
           users: interviewers.map((interviewer: any) => {
-            const interviewerLatestAvailability = getMostRecentAvailabilitySubmission(availability.filter((a: any) => a.user_id === interviewer.id));
+            const interviewerLatestAvailability = getLatestAvailabilityPerUser(availability.filter((a: any) => a.user_id === interviewer.id));
             return {
               name: interviewer.name,
               email: interviewer.email,
