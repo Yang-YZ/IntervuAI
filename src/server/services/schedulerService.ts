@@ -65,18 +65,15 @@ export class SchedulerService {
       }
 
       const primaryInterview = individualInterviews[0];
-      // Get timezone from the candidate's availability data
-      const candidateTimezone = request.candidate_availability.length > 0 ? 
-        request.candidate_availability[0].timezone || request.timezone : 
-        request.timezone;
-      const scheduledTime = this.createScheduledTime(primaryInterview, candidateTimezone);
+      // Use the scheduler's timezone for the scheduled time
+      const scheduledTime = this.createScheduledTime(primaryInterview, request.timezone);
 
       return {
         success: true,
         scheduled_time: scheduledTime,
-        message: this.formatMultipleInterviewsMessage(individualInterviews, candidateTimezone),
+        message: this.formatMultipleInterviewsMessage(individualInterviews, request.timezone),
         suggested_times: individualInterviews.slice(1, opts.maxSuggestions).map(slot => 
-          this.createScheduledTime(slot, candidateTimezone)
+          this.createScheduledTime(slot, request.timezone)
         ),
         all_available_slots: individualInterviews.map(slot => ({
           date: slot.date,
@@ -121,6 +118,7 @@ export class SchedulerService {
     users?: User[]
   ): TimeSlotMatch[] {
     const allInterviews: TimeSlotMatch[] = [];
+    const usedTimeSlots = new Set<string>(); // Track used time slots to prevent conflicts
 
     // Group interviewer availability by user_id
     const interviewerMap = new Map<string, Availability[]>();
@@ -131,7 +129,7 @@ export class SchedulerService {
       interviewerMap.get(avail.user_id)!.push(avail);
     });
 
-    // Find interviews for each interviewer individually
+    // Find interviews for each interviewer individually, avoiding conflicts
     interviewerMap.forEach((interviewerAvails, interviewerId) => {
       const overlappingSlots = this.findOverlappingSlots(
         candidateAvailability,
@@ -139,22 +137,33 @@ export class SchedulerService {
         options
       );
 
-      // Take the first available slot for this interviewer (brute force approach)
-      if (overlappingSlots.length > 0) {
-        const firstSlot = overlappingSlots[0];
+      // Find the first available slot that doesn't conflict with already scheduled interviews
+      for (const slot of overlappingSlots) {
+        const slotKey = `${slot.date}_${slot.startTime}_${slot.endTime}`;
         
-        // Find the interviewer name from the users array
-        const interviewer = users?.find((user: any) => user.id === interviewerId);
-        const interviewerName = interviewer ? `${interviewer.name} (${interviewer.email})` : `Interviewer ${interviewerId.substring(0, 8)}`;
-        
-        allInterviews.push({
-          ...firstSlot,
-          interviewer_id: interviewerId,
-          interviewer_name: interviewerName
-        });
+        if (!usedTimeSlots.has(slotKey)) {
+          // This slot is available, use it
+          usedTimeSlots.add(slotKey);
+          
+          // Find the interviewer name from the users array
+          const interviewer = users?.find((user: any) => user.id === interviewerId);
+          const interviewerName = interviewer ? `${interviewer.name} (${interviewer.email})` : `Interviewer ${interviewerId.substring(0, 8)}`;
+          
+          allInterviews.push({
+            ...slot,
+            interviewer_id: interviewerId,
+            interviewer_name: interviewerName
+          });
+          
+          console.log(`[findIndividualInterviews] Scheduled ${interviewerName} for ${slot.date} ${slot.startTime}-${slot.endTime}`);
+          break; // Move to next interviewer
+        } else {
+          console.log(`[findIndividualInterviews] Skipping conflicting slot ${slotKey} for interviewer ${interviewerId}`);
+        }
       }
     });
 
+    console.log(`[findIndividualInterviews] Total interviews scheduled: ${allInterviews.length}`);
     return allInterviews;
   }
 
@@ -166,13 +175,17 @@ export class SchedulerService {
     interviewerAvailability: Availability[],
     options: SchedulingOptions
   ): TimeSlotMatch[] {
+    console.log('[findOverlappingSlots] Input candidate availability:', candidateAvailability);
+    console.log('[findOverlappingSlots] Input interviewer availability:', interviewerAvailability);
+    
     const overlappingSlots: TimeSlotMatch[] = [];
 
     // Create a map of candidate availability by date
     const candidateMap = new Map<string, TimeSlot[]>();
     candidateAvailability.forEach(avail => {
-      // Group time slots by date since each time slot has its own date
+      console.log('[findOverlappingSlots] Processing candidate availability:', avail);
       avail.time_slots.forEach(slot => {
+        console.log('[findOverlappingSlots] Processing candidate slot:', slot);
         if (!candidateMap.has(slot.date)) {
           candidateMap.set(slot.date, []);
         }
@@ -180,24 +193,38 @@ export class SchedulerService {
       });
     });
 
+    console.log('[findOverlappingSlots] Candidate map:', candidateMap);
+
     // Check each interviewer availability against candidate availability
     interviewerAvailability.forEach((interviewerAvail) => {
+      console.log('[findOverlappingSlots] Processing interviewer availability:', interviewerAvail);
       interviewerAvail.time_slots.forEach((interviewerSlot) => {
+        console.log('[findOverlappingSlots] Processing interviewer slot:', interviewerSlot);
         const candidateSlots = candidateMap.get(interviewerSlot.date);
+        console.log('[findOverlappingSlots] Found candidate slots for date:', interviewerSlot.date, candidateSlots);
+        
         if (!candidateSlots) {
           return;
         }
 
         candidateSlots.forEach((candidateSlot) => {
+          console.log('[findOverlappingSlots] Comparing slots:');
+          console.log('  Interviewer slot:', interviewerSlot);
+          console.log('  Candidate slot:', candidateSlot);
+          
           const overlaps = this.findTimeSlotOverlap(
             interviewerSlot,
             candidateSlot,
             options.duration
           );
 
+          console.log('[findOverlappingSlots] Found overlaps:', overlaps);
+
           if (overlaps && overlaps.length > 0) {
             // Select the best time slot from the possible options
             const bestSlot = this.selectBestTimeSlot(overlaps);
+            console.log('[findOverlappingSlots] Best slot selected:', bestSlot);
+            
             const timeSlotMatch = {
               date: interviewerSlot.date, // Use date from the interviewer slot
               startTime: bestSlot.start,
@@ -212,8 +239,10 @@ export class SchedulerService {
       });
     });
 
+    console.log('[findOverlappingSlots] Final overlapping slots:', overlappingSlots);
     return overlappingSlots;
   }
+
 
   /**
    * Find overlap between two time slots and generate multiple possible interview slots
@@ -223,19 +252,28 @@ export class SchedulerService {
     slot2: TimeSlot,
     requiredDuration: number
   ): TimeSlot[] {
+    console.log('[findTimeSlotOverlap] Input slots:', slot1, slot2, 'duration:', requiredDuration);
+    
     const start1 = this.parseTime(slot1.start);
     const end1 = this.parseTime(slot1.end);
     const start2 = this.parseTime(slot2.start);
     const end2 = this.parseTime(slot2.end);
 
+    console.log('[findTimeSlotOverlap] Parsed times:', { start1, end1, start2, end2 });
+
     // Find the overlap
     const overlapStart = this.maxTime(start1, start2);
     const overlapEnd = this.minTime(end1, end2);
 
+    console.log('[findTimeSlotOverlap] Overlap range:', { overlapStart, overlapEnd });
+
     const overlapDuration = this.timeDifference(overlapStart, overlapEnd);
+
+    console.log('[findTimeSlotOverlap] Overlap duration:', overlapDuration, 'required:', requiredDuration);
 
     // Check if there's enough time for the required duration
     if (overlapDuration < requiredDuration) {
+      console.log('[findTimeSlotOverlap] Not enough time for required duration');
       return [];
     }
 
@@ -323,6 +361,7 @@ export class SchedulerService {
 
   /**
    * Create a scheduled time in ISO format
+   * The slot times are in the user's timezone, so we need to convert to UTC for storage
    */
   private createScheduledTime(slot: TimeSlotMatch, timezone: string): string {
     console.log('[createScheduledTime] Input slot:', slot);
@@ -344,13 +383,15 @@ export class SchedulerService {
     
     console.log('[createScheduledTime] Time with seconds:', timeWithSeconds);
     
+    // Create datetime string in the specified timezone
     const dateTimeString = `${slot.date}T${timeWithSeconds}`;
     console.log('[createScheduledTime] DateTime string:', dateTimeString);
     
-    // Convert from local time to UTC for storage
+    // Convert from the specified timezone to UTC for storage
     const zonedTime = zonedTimeToUtc(dateTimeString, timezone);
     console.log('[createScheduledTime] Zoned time:', zonedTime);
     
+    // Return the UTC time in ISO format
     const result = zonedTime.toISOString();
     console.log('[createScheduledTime] Final ISO string:', result);
     

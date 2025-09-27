@@ -65,10 +65,10 @@ export class Database {
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
           scheduler_id TEXT NOT NULL,
-          date TEXT NOT NULL,
-          time_slots TEXT NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          time_slots TEXT NOT NULL, -- JSON array of time slots with date-time info
+          timezone TEXT NOT NULL, -- User's timezone when they submitted
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
           FOREIGN KEY (scheduler_id) REFERENCES schedulers(id) ON DELETE CASCADE
       );
@@ -143,25 +143,34 @@ export class Database {
         SELECT name FROM pragma_table_info('users') WHERE name = 'timezone'
       `);
       
+      console.log('🔍 Checking for timezone column in users table...');
+      console.log('Timezone result:', timezoneResult);
+      
       if (timezoneResult.length > 0 && timezoneResult[0].values.length > 0) {
         console.log('🔄 Removing timezone column from users table...');
-        this.db.exec(`
-          CREATE TABLE users_new (
-            id TEXT PRIMARY KEY,
-            scheduler_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            role TEXT NOT NULL CHECK (role IN ('candidate', 'interviewer')),
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (scheduler_id) REFERENCES schedulers(id) ON DELETE CASCADE
-          )
-        `);
-        this.db.exec('INSERT INTO users_new SELECT id, scheduler_id, name, email, role, created_at, updated_at FROM users');
-        this.db.exec('DROP TABLE users');
-        this.db.exec('ALTER TABLE users_new RENAME TO users');
-        this.saveDatabase();
-        console.log('✅ Migration completed: timezone column removed from users table');
+        try {
+          this.db.exec(`
+            CREATE TABLE users_new (
+              id TEXT PRIMARY KEY,
+              scheduler_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              email TEXT NOT NULL,
+              role TEXT NOT NULL CHECK (role IN ('candidate', 'interviewer')),
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (scheduler_id) REFERENCES schedulers(id) ON DELETE CASCADE
+            )
+          `);
+          this.db.exec('INSERT INTO users_new SELECT id, scheduler_id, name, email, role, created_at, updated_at FROM users');
+          this.db.exec('DROP TABLE users');
+          this.db.exec('ALTER TABLE users_new RENAME TO users');
+          this.saveDatabase();
+          console.log('✅ Migration completed: timezone column removed from users table');
+        } catch (error) {
+          console.error('❌ Error during timezone migration:', error);
+        }
+      } else {
+        console.log('✅ No timezone column found in users table - migration not needed');
       }
 
       // Check if availability table needs migration to new schema
@@ -400,7 +409,6 @@ export class Database {
       name: row.name,
       email: row.email,
       role: row.role,
-      timezone: row.timezone || 'UTC',
       created_at: row.created_at,
       updated_at: row.updated_at
     }));

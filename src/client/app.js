@@ -497,19 +497,7 @@ async function checkUserRegistration() {
             document.getElementById('userName').value = currentUser.name;
             document.getElementById('userRole').value = currentUser.role;
             
-            // Store user's timezone and set timezone selector
-            if (currentUser.timezone) {
-                currentTimezone = currentUser.timezone;
-                console.log('[checkUserRegistration] Setting timezone to:', currentUser.timezone);
-                // Set timezone selector if it exists
-                const timezoneSelect = document.getElementById('timezoneSelect');
-                if (timezoneSelect) {
-                    timezoneSelect.value = currentUser.timezone;
-                    console.log('[checkUserRegistration] Timezone selector set to:', timezoneSelect.value);
-                } else {
-                    console.log('[checkUserRegistration] Timezone selector not found');
-                }
-            }
+            // Timezone will be set when user submits availability
 
             // Normalize this user's availability first
             const userAvailability = Array.isArray(data.availability) ? data.availability : [];

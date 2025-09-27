@@ -17,7 +17,6 @@ export interface User {
   name: string;
   email: string;
   role: 'candidate' | 'interviewer';
-  timezone?: string; // Optional timezone from most recent availability record
   created_at: string;
   updated_at: string;
 }
