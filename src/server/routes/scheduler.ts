@@ -8,7 +8,6 @@ const router = express.Router();
 
 
 function getLatestAvailabilityPerUser(availabilityRecords: any[]): any[] {
-  console.log(`[getLatestAvailabilityPerUser] Input records:`, availabilityRecords.length);
   if (!availabilityRecords || availabilityRecords.length === 0) {
     return [];
   }
@@ -23,12 +22,8 @@ function getLatestAvailabilityPerUser(availabilityRecords: any[]): any[] {
     }
   });
   
-  console.log(`[getLatestAvailabilityPerUser] Latest records per user:`, userLatestMap.size);
-  
   // Return the latest records directly (new Availability format)
-  const result = Array.from(userLatestMap.values());
-  console.log(`[getLatestAvailabilityPerUser] Result:`, result.length);
-  return result;
+  return Array.from(userLatestMap.values());
 }
 
 // Create a new scheduler
@@ -261,7 +256,6 @@ router.post('/:id/generate-schedule', [
       interviewers.some((interviewer: any) => interviewer.id === a.user_id)
     ));
 
-
     if (candidateAvailability.length === 0 || interviewerAvailability.length === 0) {
       res.status(400).json({ 
         error: 'Candidate and all interviewers must provide availability' 
@@ -488,19 +482,12 @@ router.get('/:id/users', [
     
     res.json({
       success: true,
-      users: users.map(user => {
-        // Find the most recent availability for this user to get timezone
-        const userAvailability = availability.filter((a: any) => a.user_id === user.id);
-        const mostRecentAvailability = userAvailability.length > 0 ? userAvailability[userAvailability.length - 1] : null;
-        
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          timezone: mostRecentAvailability?.timezone || scheduler.timezone || 'UTC'
-        };
-      })
+      users: users.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }))
     });
 
   } catch (error) {
@@ -569,29 +556,37 @@ router.get('/:id/status', [
 
     // Format availability details for display
     const formatAvailabilityDetails = (availability: any[], userTimezone?: string) => {
-      console.log(`[formatAvailabilityDetails] Called with userTimezone:`, userTimezone);
-      return availability.map(avail => {
+      // Group time slots by date since each slot has its own date
+      const dateMap = new Map<string, string[]>();
+      
+      availability.forEach(avail => {
         const timeSlots = Array.isArray(avail.time_slots) ? avail.time_slots : [];
-        const formattedSlots = timeSlots.map((slot: any) => {
+        timeSlots.forEach((slot: any) => {
+          if (!dateMap.has(slot.date)) {
+            dateMap.set(slot.date, []);
+          }
+          
           // Convert UTC time slots back to user's timezone for display
+          let formattedSlot;
           if (slot.start && slot.start.includes('T')) {
             const displayTimezone = userTimezone || scheduler.timezone || 'UTC';
-            console.log(`[formatAvailabilityDetails] Converting slot: ${slot.start} -> ${slot.end} from UTC to ${displayTimezone}`);
             const startTime = format(utcToZonedTime(slot.start, displayTimezone), 'HH:mm', { timeZone: displayTimezone });
             const endTime = format(utcToZonedTime(slot.end, displayTimezone), 'HH:mm', { timeZone: displayTimezone });
-            console.log(`[formatAvailabilityDetails] Converted to: ${startTime} -> ${endTime}`);
-            return `${startTime}-${endTime}`;
+            formattedSlot = `${startTime}-${endTime}`;
+          } else {
+            formattedSlot = `${slot.start}-${slot.end}`;
           }
-          return `${slot.start}-${slot.end}`;
-        }).join(', ');
-        
-        console.log(`[formatAvailabilityDetails] Date: ${avail.date}, TimeSlots: ${formattedSlots}`);
-        return {
-          date: avail.date,
-          timeSlots: formattedSlots,
-          slotCount: timeSlots.length
-        };
+          
+          dateMap.get(slot.date)!.push(formattedSlot);
+        });
       });
+      
+      // Convert map to array format
+      return Array.from(dateMap.entries()).map(([date, timeSlots]) => ({
+        date: date,
+        timeSlots: timeSlots.join(', '),
+        slotCount: timeSlots.length
+      }));
     };
 
     res.json({
