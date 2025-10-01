@@ -189,7 +189,6 @@ export class SchedulerService {
         );
         
         // Try to find a slot that doesn't conflict with already scheduled interviews
-        let foundNonConflictingSlot = false;
         for (const slot of overlappingSlots) {
           const proposedSlot = {
             date: slot.date,
@@ -218,7 +217,9 @@ export class SchedulerService {
           });
           
           if (!conflictsWithScheduled) {
-            // Found a non-conflicting slot
+            // Found a non-conflicting slot - update candidate time slots tracking
+            usedCandidateTimeSlots.push(proposedSlot);
+            
             const interviewer = users?.find((user: any) => user.id === interviewerId);
             const interviewerName = interviewer ? `${interviewer.name} (${interviewer.email})` : `Interviewer ${interviewerId.substring(0, 8)}`;
             
@@ -228,7 +229,6 @@ export class SchedulerService {
               interviewer_name: interviewerName
             });
             
-            foundNonConflictingSlot = true;
             break;
           }
         }
