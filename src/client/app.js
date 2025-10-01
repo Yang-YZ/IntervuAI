@@ -452,16 +452,20 @@ function showScheduledResults() {
     `;
     
     const scheduledDate = new Date(currentScheduler.scheduled_time);
+    const schedulerTimezone = currentScheduler.timezone || 'UTC';
+    
     const formattedDate = scheduledDate.toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
-        day: 'numeric' 
+        day: 'numeric',
+        timeZone: schedulerTimezone
     });
     const formattedTime = scheduledDate.toLocaleTimeString('en-US', { 
         hour: 'numeric', 
         minute: '2-digit',
-        timeZoneName: 'short'
+        timeZoneName: 'short',
+        timeZone: schedulerTimezone
     });
     
     scheduledTimeDiv.innerHTML = `
@@ -967,19 +971,8 @@ function showSuggestedTimes(suggestedTimes) {
 // Show the scheduled time to the user
 // Show detailed schedule information
 async function showDetailedSchedule(scheduleData) {
-    // Get candidate's timezone for display
-    let candidateTimezone = 'UTC';
-    try {
-        const users = await fetch(`${API_BASE}/scheduler/${currentScheduler.id}/users`).then(r => r.json());
-        if (users.success && users.users) {
-            const candidate = users.users.find(u => u.role === 'candidate');
-            if (candidate && candidate.timezone) {
-                candidateTimezone = candidate.timezone;
-            }
-        }
-    } catch (error) {
-        console.error('Error fetching candidate timezone:', error);
-    }
+    // Use the scheduler's timezone for display
+    const schedulerTimezone = currentScheduler.timezone || 'UTC';
     
     const scheduledDate = new Date(scheduleData.scheduled_time);
     const formattedDate = scheduledDate.toLocaleDateString('en-US', { 
@@ -987,13 +980,13 @@ async function showDetailedSchedule(scheduleData) {
         year: 'numeric', 
         month: 'long', 
         day: 'numeric',
-        timeZone: candidateTimezone
+        timeZone: schedulerTimezone
     });
     const formattedTime = scheduledDate.toLocaleTimeString('en-US', { 
         hour: '2-digit', 
         minute: '2-digit',
         timeZoneName: 'short',
-        timeZone: candidateTimezone
+        timeZone: schedulerTimezone
     });
 
     const scheduledTimeDiv = document.createElement('div');
@@ -1027,24 +1020,24 @@ async function showDetailedSchedule(scheduleData) {
         `;
 
         scheduleData.individual_interviews.forEach((interview) => {
-            // Convert interview time to candidate's timezone
+            // Convert interview time to scheduler's timezone
             const interviewDateTime = new Date(`${interview.date}T${interview.start_time}:00Z`);
             const date = interviewDateTime.toLocaleDateString('en-US', { 
                 weekday: 'short', 
                 month: 'short', 
                 day: 'numeric',
-                timeZone: candidateTimezone
+                timeZone: schedulerTimezone
             });
             const startTime = interviewDateTime.toLocaleTimeString('en-US', { 
                 hour: '2-digit', 
                 minute: '2-digit',
-                timeZone: candidateTimezone
+                timeZone: schedulerTimezone
             });
             const endDateTime = new Date(`${interview.date}T${interview.end_time}:00Z`);
             const endTime = endDateTime.toLocaleTimeString('en-US', { 
                 hour: '2-digit', 
                 minute: '2-digit',
-                timeZone: candidateTimezone
+                timeZone: schedulerTimezone
             });
             const time = `${date} ${startTime} - ${endTime}`;
             

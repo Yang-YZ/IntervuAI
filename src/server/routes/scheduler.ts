@@ -8,7 +8,6 @@ const router = express.Router();
 
 
 function getLatestAvailabilityPerUser(availabilityRecords: any[]): any[] {
-  console.log(`[getLatestAvailabilityPerUser] Input records:`, availabilityRecords.length);
   if (!availabilityRecords || availabilityRecords.length === 0) {
     return [];
   }
@@ -23,12 +22,8 @@ function getLatestAvailabilityPerUser(availabilityRecords: any[]): any[] {
     }
   });
   
-  console.log(`[getLatestAvailabilityPerUser] Latest records per user:`, userLatestMap.size);
-  
   // Return the latest records directly (new Availability format)
-  const result = Array.from(userLatestMap.values());
-  console.log(`[getLatestAvailabilityPerUser] Result:`, result.length);
-  return result;
+  return Array.from(userLatestMap.values());
 }
 
 // Create a new scheduler
@@ -260,7 +255,6 @@ router.post('/:id/generate-schedule', [
     const interviewerAvailability = getLatestAvailabilityPerUser(availability.filter((a: any) => 
       interviewers.some((interviewer: any) => interviewer.id === a.user_id)
     ));
-
 
     if (candidateAvailability.length === 0 || interviewerAvailability.length === 0) {
       res.status(400).json({ 
@@ -562,8 +556,6 @@ router.get('/:id/status', [
 
     // Format availability details for display
     const formatAvailabilityDetails = (availability: any[], userTimezone?: string) => {
-      console.log(`[formatAvailabilityDetails] Called with userTimezone:`, userTimezone);
-      
       // Group time slots by date since each slot has its own date
       const dateMap = new Map<string, string[]>();
       
@@ -578,10 +570,8 @@ router.get('/:id/status', [
           let formattedSlot;
           if (slot.start && slot.start.includes('T')) {
             const displayTimezone = userTimezone || scheduler.timezone || 'UTC';
-            console.log(`[formatAvailabilityDetails] Converting slot: ${slot.start} -> ${slot.end} from UTC to ${displayTimezone}`);
             const startTime = format(utcToZonedTime(slot.start, displayTimezone), 'HH:mm', { timeZone: displayTimezone });
             const endTime = format(utcToZonedTime(slot.end, displayTimezone), 'HH:mm', { timeZone: displayTimezone });
-            console.log(`[formatAvailabilityDetails] Converted to: ${startTime} -> ${endTime}`);
             formattedSlot = `${startTime}-${endTime}`;
           } else {
             formattedSlot = `${slot.start}-${slot.end}`;
@@ -592,16 +582,11 @@ router.get('/:id/status', [
       });
       
       // Convert map to array format
-      const result = Array.from(dateMap.entries()).map(([date, timeSlots]) => {
-        console.log(`[formatAvailabilityDetails] Date: ${date}, TimeSlots: ${timeSlots.join(', ')}`);
-        return {
-          date: date,
-          timeSlots: timeSlots.join(', '),
-          slotCount: timeSlots.length
-        };
-      });
-      
-      return result;
+      return Array.from(dateMap.entries()).map(([date, timeSlots]) => ({
+        date: date,
+        timeSlots: timeSlots.join(', '),
+        slotCount: timeSlots.length
+      }));
     };
 
     res.json({
