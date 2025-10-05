@@ -492,21 +492,6 @@
                         <strong>Scheduler ID:</strong> <span id="schedulerIdValue"></span>
                     </div>
                 </div>
-                <div class="timezone-selector">
-                    <label for="timezoneSelect">Timezone:</label>
-                    <select id="timezoneSelect">
-                        <option value="UTC">UTC</option>
-                        <option value="America/New_York">Eastern Time</option>
-                        <option value="America/Chicago">Central Time</option>
-                        <option value="America/Denver">Mountain Time</option>
-                        <option value="America/Los_Angeles">Pacific Time</option>
-                        <option value="Europe/London">London</option>
-                        <option value="Europe/Paris">Paris</option>
-                        <option value="Asia/Tokyo">Tokyo</option>
-                        <option value="Asia/Shanghai">Shanghai</option>
-                        <option value="Australia/Sydney">Sydney</option>
-                    </select>
-                </div>
             </div>
 
             <div id="statusMessage"></div>
@@ -539,6 +524,24 @@
             <div id="calendarSection" class="hidden">
                 <div id="availabilityForm" class="availability-form hidden">
                     <h3>Add Your Availability</h3>
+                    
+                    <!-- Timezone Selection -->
+                    <div class="form-group">
+                        <label for="timezoneSelect">Your Timezone:</label>
+                        <select id="timezoneSelect">
+                            <option value="UTC">UTC</option>
+                            <option value="America/New_York">Eastern Time (ET)</option>
+                            <option value="America/Chicago">Central Time (CT)</option>
+                            <option value="America/Denver">Mountain Time (MT)</option>
+                            <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                            <option value="Europe/London">London (GMT/BST)</option>
+                            <option value="Europe/Paris">Paris (CET/CEST)</option>
+                            <option value="Asia/Tokyo">Tokyo (JST)</option>
+                            <option value="Asia/Shanghai">Shanghai (CST)</option>
+                            <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+                        </select>
+                        <small style="color: var(--muted); font-size: 0.9rem;">Select your timezone to ensure times are displayed and saved correctly.</small>
+                    </div>
                     
                     <!-- Date Selection -->
                     <div class="form-group">
@@ -586,6 +589,17 @@
             </div>
         </div>
     </div>
+
+    <!-- Footer with Issues Link -->
+    <footer style="text-align: center; padding: 20px; margin-top: 40px; border-top: 1px solid var(--border); color: var(--muted);">
+        <p>
+            Found a bug or have a suggestion? 
+            <a href="https://github.com/Yang-YZ/IntervuAI/issues" target="_blank" rel="noopener noreferrer" 
+               style="color: var(--primary); text-decoration: none; font-weight: 500;">
+                Report an issue
+            </a>
+        </p>
+    </footer>
 
     <script src="app.js"></script>
 </body>
