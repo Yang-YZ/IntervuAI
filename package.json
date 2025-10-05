@@ -5,7 +5,8 @@
   "main": "dist/server/index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy-client",
+    "copy-client": "node -e \"const fs = require('fs'); const path = require('path'); const src = 'src/client'; const dest = 'dist/client'; fs.mkdirSync(dest, { recursive: true }); fs.readdirSync(src).forEach(file => { fs.copyFileSync(path.join(src, file), path.join(dest, file)); });\"",
     "start": "node dist/server/index.js",
     "install:all": "npm install"
   },
