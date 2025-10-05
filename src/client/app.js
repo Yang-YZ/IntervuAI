@@ -43,6 +43,18 @@ let currentUser = null;
 let currentAvailability = [];
 let currentTimezone = 'UTC';
 
+// Auto-detect user's timezone
+function detectUserTimezone() {
+  try {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    console.log('🌍 Auto-detected timezone:', detected);
+    return detected;
+  } catch (error) {
+    console.log('⚠️ Could not detect timezone, using UTC');
+    return 'UTC';
+  }
+}
+
 // API base URL
 const API_BASE = '/api';
 
@@ -468,11 +480,23 @@ function showScheduledResults() {
         timeZone: schedulerTimezone
     });
     
+    // Also show in user's local timezone if different
+    let localTimeDisplay = '';
+    if (schedulerTimezone !== currentTimezone) {
+        const localFormattedTime = scheduledDate.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            timeZoneName: 'short',
+            timeZone: currentTimezone
+        });
+        localTimeDisplay = `<br><small style="color: var(--muted);">Your local time: ${localFormattedTime}</small>`;
+    }
+    
     scheduledTimeDiv.innerHTML = `
         <div style="text-align: center;">
             <h3 style="color: var(--success); margin-bottom: 10px;">🎉 Interview Scheduled!</h3>
             <p style="font-size: 1.1rem; margin-bottom: 5px;"><strong>${formattedDate}</strong></p>
-            <p style="font-size: 1rem; color: var(--text-secondary);">${formattedTime}</p>
+            <p style="font-size: 1rem; color: var(--text-secondary);">${formattedTime}${localTimeDisplay}</p>
             <p style="margin-top: 15px; color: var(--text-secondary);">Check your email for detailed information.</p>
         </div>
     `;
@@ -998,6 +1022,9 @@ async function showDetailedSchedule(scheduleData) {
             <h3 style="color: var(--primary); margin-bottom: 10px;">${formattedDate}</h3>
             <p style="font-size: 1.2rem; color: var(--text-dark);">${formattedTime}</p>
             <p style="color: var(--muted); margin-top: 10px;">${scheduleData.message || 'Confirmation emails have been sent to all participants.'}</p>
+            <p style="color: var(--muted); font-size: 0.9rem; margin-top: 10px;">
+                📍 All times shown in ${schedulerTimezone} timezone
+            </p>
         </div>
     `;
 
@@ -1221,42 +1248,23 @@ function updateAvailabilityDisplay() {
                             return s;
                         }
                         
-                        // Use the same timezone conversion logic as the calendar
-                        const timezoneOffsets = {
-                            'UTC': 0,
-                            'America/New_York': -4, // EDT (summer)
-                            'America/Chicago': -5,  // CDT
-                            'America/Denver': -6,   // MDT
-                            'America/Los_Angeles': -7, // PDT (summer)
-                            'Europe/London': 1,     // BST (summer)
-                            'Europe/Paris': 2,      // CEST (summer)
-                            'Asia/Tokyo': 9,
-                            'Asia/Shanghai': 8,
-                            'Australia/Sydney': 10  // AEST (winter)
-                        };
+                        // Use more accurate timezone conversion with date-fns-tz
+                        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+                        const dateTimeString = `${today}T${s}:00`;
                         
-                        const [hours, minutes] = s.split(':').map(Number);
-                        const schedulerOffset = timezoneOffsets[schedulerTimezone] || 0;
-                        const currentOffset = timezoneOffsets[currentTimezone] || 0;
+                        // Create a date in the scheduler's timezone
+                        const zonedTime = new Date(dateTimeString + (schedulerTimezone === 'UTC' ? 'Z' : ''));
                         
-                        // Calculate the time difference
-                        const offsetDiff = currentOffset - schedulerOffset;
+                        // Convert to user's timezone
+                        const convertedTime = zonedTime.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                            timeZone: currentTimezone
+                        });
                         
-                        // Apply the offset
-                        let newHours = hours + offsetDiff;
-                        let newMinutes = minutes;
-                        
-                        // Handle day overflow/underflow
-                        if (newHours < 0) {
-                            newHours += 24;
-                        } else if (newHours >= 24) {
-                            newHours -= 24;
-                        }
-                        
-                        const result = `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
-                        
-                        console.log(`[formatSlotForDisplay] Converting ${s} from ${schedulerTimezone} to ${currentTimezone}: ${result}`);
-                        return result;
+                        console.log(`[formatSlotForDisplay] Converting ${s} from ${schedulerTimezone} to ${currentTimezone}: ${convertedTime}`);
+                        return convertedTime;
                     } catch (e) {
                         console.error('[formatSlotForDisplay] Error converting time:', e);
                         return s;
@@ -1574,4 +1582,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (selectedDateElement) {
         selectedDateElement.value = formatDate(new Date());
     }
+    
+    // Auto-detect and set timezone
+    const detectedTimezone = detectUserTimezone();
+    currentTimezone = detectedTimezone;
+    
+    // Set timezone selector to detected timezone
+    const timezoneSelects = document.querySelectorAll('#timezoneSelect');
+    timezoneSelects.forEach(select => {
+        select.value = detectedTimezone;
+    });
+    
+    console.log('🌍 Initialized with timezone:', detectedTimezone);
 });

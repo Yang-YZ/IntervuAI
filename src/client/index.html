@@ -525,6 +525,24 @@
                 <div id="availabilityForm" class="availability-form hidden">
                     <h3>Add Your Availability</h3>
                     
+                    <!-- Timezone Selection -->
+                    <div class="form-group">
+                        <label for="timezoneSelect">Your Timezone:</label>
+                        <select id="timezoneSelect">
+                            <option value="UTC">UTC</option>
+                            <option value="America/New_York">Eastern Time (ET)</option>
+                            <option value="America/Chicago">Central Time (CT)</option>
+                            <option value="America/Denver">Mountain Time (MT)</option>
+                            <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                            <option value="Europe/London">London (GMT/BST)</option>
+                            <option value="Europe/Paris">Paris (CET/CEST)</option>
+                            <option value="Asia/Tokyo">Tokyo (JST)</option>
+                            <option value="Asia/Shanghai">Shanghai (CST)</option>
+                            <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+                        </select>
+                        <small style="color: var(--muted); font-size: 0.9rem;">Select your timezone to ensure times are displayed and saved correctly.</small>
+                    </div>
+                    
                     <!-- Date Selection -->
                     <div class="form-group">
                         <label>Select Date:</label>

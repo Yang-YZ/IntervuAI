@@ -280,6 +280,28 @@ export class SchedulerService {
   }
 
   /**
+   * Convert a time slot from its timezone to UTC
+   */
+  private convertSlotToUTC(slot: TimeSlot, timezone: string): TimeSlot {
+    const dateTimeString = `${slot.date}T${slot.start}:00`;
+    const zonedTime = zonedTimeToUtc(dateTimeString, timezone);
+    
+    // Convert UTC time back to HH:MM format for the same date
+    const utcDate = zonedTime.toISOString().split('T')[0];
+    const utcTime = zonedTime.toISOString().split('T')[1].substring(0, 5);
+    
+    const endDateTimeString = `${slot.date}T${slot.end}:00`;
+    const endZonedTime = zonedTimeToUtc(endDateTimeString, timezone);
+    const utcEndTime = endZonedTime.toISOString().split('T')[1].substring(0, 5);
+    
+    return {
+      date: utcDate,
+      start: utcTime,
+      end: utcEndTime
+    };
+  }
+
+  /**
    * Find all overlapping time slots between candidate and interviewer availability
    */
   private findOverlappingSlots(
@@ -289,21 +311,23 @@ export class SchedulerService {
   ): TimeSlotMatch[] {
     const overlappingSlots: TimeSlotMatch[] = [];
 
-    // Create a map of candidate availability by date
+    // Create a map of candidate availability by date (converted to UTC)
     const candidateMap = new Map<string, TimeSlot[]>();
     candidateAvailability.forEach(avail => {
       avail.time_slots.forEach(slot => {
-        if (!candidateMap.has(slot.date)) {
-          candidateMap.set(slot.date, []);
+        const utcSlot = this.convertSlotToUTC(slot, avail.timezone);
+        if (!candidateMap.has(utcSlot.date)) {
+          candidateMap.set(utcSlot.date, []);
         }
-        candidateMap.get(slot.date)!.push(slot);
+        candidateMap.get(utcSlot.date)!.push(utcSlot);
       });
     });
 
-    // Check each interviewer availability against candidate availability
+    // Check each interviewer availability against candidate availability (converted to UTC)
     interviewerAvailability.forEach((interviewerAvail) => {
       interviewerAvail.time_slots.forEach((interviewerSlot) => {
-        const candidateSlots = candidateMap.get(interviewerSlot.date);
+        const utcInterviewerSlot = this.convertSlotToUTC(interviewerSlot, interviewerAvail.timezone);
+        const candidateSlots = candidateMap.get(utcInterviewerSlot.date);
         
         if (!candidateSlots) {
           return;
@@ -311,7 +335,7 @@ export class SchedulerService {
 
         candidateSlots.forEach((candidateSlot) => {
           const overlaps = this.findTimeSlotOverlap(
-            interviewerSlot,
+            utcInterviewerSlot,
             candidateSlot,
             options.duration
           );
@@ -320,7 +344,7 @@ export class SchedulerService {
             // Add ALL possible slots, not just the best one
             overlaps.forEach(slot => {
               const timeSlotMatch = {
-                date: interviewerSlot.date, // Use date from the interviewer slot
+                date: utcInterviewerSlot.date, // Use UTC date
                 startTime: slot.start,
                 endTime: slot.end,
                 duration: options.duration,
@@ -446,7 +470,7 @@ export class SchedulerService {
 
   /**
    * Create a scheduled time in ISO format
-   * The slot times are in the user's timezone, so we need to convert to UTC for storage
+   * The slot times are now in UTC, so we need to convert them to the scheduler's timezone for display
    */
   private createScheduledTime(slot: TimeSlotMatch, timezone: string): string {
     // Check if date is undefined and provide a fallback
@@ -462,13 +486,14 @@ export class SchedulerService {
       ? `${slot.startTime}:00` 
       : slot.startTime;
     
-    // Create datetime string in the specified timezone
-    const dateTimeString = `${slot.date}T${timeWithSeconds}`;
+    // Create datetime string in UTC (since slot is now in UTC)
+    const utcDateTimeString = `${slot.date}T${timeWithSeconds}Z`;
     
-    // Convert from the specified timezone to UTC for storage
-    const zonedTime = zonedTimeToUtc(dateTimeString, timezone);
+    // Convert from UTC to the specified timezone for display
+    const utcTime = new Date(utcDateTimeString);
+    const zonedTime = utcToZonedTime(utcTime, timezone);
     
-    // Return the UTC time in ISO format
+    // Return the time in the specified timezone in ISO format
     return zonedTime.toISOString();
   }
 
