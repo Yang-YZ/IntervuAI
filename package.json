@@ -2,11 +2,11 @@
   "name": "intervuai",
   "version": "1.0.0",
   "description": "Simple interview scheduler with LLM-powered scheduling",
-  "main": "dist/server.js",
+  "main": "dist/server/index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server/index.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/server/index.js",
     "install:all": "npm install"
   },
   "keywords": ["interview", "scheduler", "llm", "calendar"],
